@@ -47,6 +47,7 @@
   <ItemGroup>
     <Compile Include="DataContext.cs" />
     <Compile Include="Entities.cs" />
+    <Compile Include="EnumerableExtensions.cs" />
     <Compile Include="Interceptor.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

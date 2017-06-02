@@ -7,19 +7,26 @@ namespace EFInterceptorDemo
     {
         static void Main(string[] args)
         {
-            using (var ctx = new DataContext(tenantId: 77, userId: 2))
+            var name = Guid.NewGuid().ToString();
+
+            using (var ctx = new DataContext(tenantId: 2, userId: 66))
             {
-                var me = ctx.Employees.FirstOrDefault(x => x.Name == "Dmitry");
-                if (me == null)
-                {
-                    me = new Employee() {Name = "Dmitry", Salary = 1000000};
-                    ctx.Employees.Add(me);
-                }
-                else me.Salary = me.Salary + 1;
+                // INSERT:
+                var employee = new Employee {Name = name, Salary = 1000000};
+                ctx.Employees.Add(employee);
                 ctx.SaveChanges();
 
-                me = ctx.Employees.First(x => x.Name == "Dmitry");
-                Console.WriteLine($"Tenant: {me.TenantId}, ModifiedBy: {me.ModifiedBy}, ModifiedAt: {me.ModifiedAt}, Name: {me.Name}, Salary: {me.Salary}");
+                // UPDATE:
+                employee = ctx.Employees.First(x => x.Name == name);
+                employee.Salary = employee.Salary + 1;
+                ctx.SaveChanges();
+            }
+
+            using (var ctx = new DataContext(tenantId: 2, userId: 66))
+            {
+                // SELECT:
+                var employee = ctx.Employees.First(x => x.Name == name);
+                Console.WriteLine($"Name: {employee.Name}, Salary: {employee.Salary}, Tenant: {employee.TenantId}, CreatedBy: {employee.CreatedById}, CreatedOn: {employee.CreatedOn}, ModifiedBy: {employee.ModifiedById}, ModifiedAt: {employee.ModifiedOn}");
             }
 
             Console.WriteLine("Press any key to exit ...");

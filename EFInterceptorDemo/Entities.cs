@@ -9,20 +9,20 @@ namespace EFInterceptorDemo
 
     public interface IEntity
     {
-        DateTime CreatedAt { get; set; }
-        long CreatedBy { get; set; }
-        DateTime ModifiedAt { get; set; }
-        long ModifiedBy { get; set; }
+        DateTime CreatedOn { get; set; }
+        long CreatedById { get; set; }
+        DateTime ModifiedOn { get; set; }
+        long ModifiedById { get; set; }
     }
 
     public interface ITenantedEntity : ITenant, IEntity {  }
 
     public abstract class Entity : IEntity
     {
-        public long CreatedBy { get; set; }
-        public DateTime CreatedAt { get; set; }
-        public long ModifiedBy { get; set; }
-        public DateTime ModifiedAt { get; set; }
+        public long CreatedById { get; set; }
+        public DateTime CreatedOn { get; set; }
+        public long ModifiedById { get; set; }
+        public DateTime ModifiedOn { get; set; }
     }
 
     public abstract class TenantedEntity : Entity, ITenantedEntity

@@ -1,4 +1,5 @@
 ﻿using System.Data.Entity;
+using System.Diagnostics;
 
 namespace EFInterceptorDemo
 {
@@ -6,7 +7,7 @@ namespace EFInterceptorDemo
     {
         public DbConfig()
         {
-            AddInterceptor(new Interceptor());
+            AddInterceptor(new EntityInterceptor());
         }
     }
 
@@ -15,10 +16,12 @@ namespace EFInterceptorDemo
 
         public DataContext(long tenantId, long userId) : this("Default", tenantId, userId) {  }
 
-        public DataContext(string connStr, long userId, long tenantId) : base(connStr)
+        public DataContext(string connStr, long tenantId, long userId) : base(connStr)
         {
             TenantId = tenantId;
             UserId = userId;
+
+            Database.Log = sql => Debug.WriteLine(sql);
         }
 
         public long UserId { get; set; }
