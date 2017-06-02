@@ -25,8 +25,14 @@ namespace EFInterceptorDemo
                 var table = (EntityType)expression.Target.ElementType;
                 if (table.Properties.Any(p => p.Name == TenantId))
                 {
-                    var binding = expression.Bind();
-                    return binding.Filter(binding.VariableType.Variable(binding.VariableName).Property(TenantId).Equal(DbExpression.FromInt64(_tenantId)));
+                    //var binding = expression.Bind();
+                    //return binding.Filter(binding.VariableType.Variable(binding.VariableName).Property(TenantId).Equal(DbExpression.FromInt64(_tenantId)));
+                    DbExpression expr = base.Visit(expression);
+                    var binding = expr.Bind();
+                    var property = binding.VariableType.Variable(binding.VariableName).Property(TenantId);
+                    var param = property.Property.TypeUsage.Parameter(TenantId);
+                    expr = binding.Filter(property.Equal(param));
+                    return expr;
                 }
                 return base.Visit(expression);
             }
