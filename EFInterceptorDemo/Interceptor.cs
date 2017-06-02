@@ -9,11 +9,6 @@ using System.Linq;
 
 namespace EFInterceptorDemo
 {
-    class SoftDeleteAttribute : Attribute
-    {
-        public static string GetSoftDeleteColumnName(EdmType type) => "IsDeleted";
-    }
-
     public class EntityInterceptor : IDbCommandTreeInterceptor
     {
         public class TenantQueryVisitor : DefaultExpressionVisitor
@@ -26,20 +21,20 @@ namespace EFInterceptorDemo
             }
 
             public override DbExpression Visit(DbScanExpression expression)
-            {
-                const string tenantId = "TenantId";
-
+            {                
                 var table = (EntityType)expression.Target.ElementType;
-                if (table.Properties.Any(p => p.Name == tenantId))
+                if (table.Properties.Any(p => p.Name == TenantId))
                 {
                     var binding = expression.Bind();
-                    return binding.Filter(binding.VariableType.Variable(binding.VariableName).Property(tenantId).Equal(DbExpression.FromInt64(_tenantId)));
+                    return binding.Filter(binding.VariableType.Variable(binding.VariableName).Property(TenantId).Equal(DbExpression.FromInt64(_tenantId)));
                 }
                 return base.Visit(expression);
             }
         }
 
-        private static void SetProperty(DataContext ctx, DbModificationCommandTree command, List<DbModificationClause> setClauses, string name, DbExpression expr)
+        const string TenantId = "TenantId";
+
+        private static void SetPropertyIfExists(DataContext ctx, DbModificationCommandTree command, ICollection<DbModificationClause> setClauses, string name, DbExpression expr)
         {
             if (ctx == null)
                 return;
@@ -52,18 +47,36 @@ namespace EFInterceptorDemo
             AddClause(type, name, command, setClauses, expr);
         }
 
-        private static void ValidateTenant(DbUpdateCommandTree command, long tenantId)
+        private static void ValidateTenantProperty(DbUpdateCommandTree command, long tenantId)
         {
             foreach (var clause in command.SetClauses.OfType<DbSetClause>())
             {
                 var pe = clause.Property as DbPropertyExpression;
-                var varRef = clause.Value as DbConstantExpression;
-                if (pe != null && pe.Property.Name == "TenantId" && varRef != null)
+                var rvalue = clause.Value as DbConstantExpression;
+                if (pe != null && pe.Property.Name == TenantId && rvalue != null)
                 {
-                    if (!varRef.Value.Equals(tenantId))
+                    if ((long)rvalue.Value != tenantId)
                         throw new NotSupportedException("Cross-tenant opreration detected");
                 }
             }
+        }
+
+        private static void ValidateTenantPredicate(DbDeleteCommandTree command, long tenantId)
+        {
+            var predicate = command.Predicate as DbBinaryExpression;
+            var lvalue = (predicate?.Left as DbPropertyExpression)?.Property;
+            var rvalue = (predicate?.Right as DbConstantExpression)?.Value;
+            if (lvalue != null && lvalue.Name == TenantId && rvalue != null && (long)rvalue != tenantId)
+                throw new NotSupportedException("Cross-tenant opreration detected");
+        }
+
+        private static void ValidateTenantPredicate(DbUpdateCommandTree command, long tenantId)
+        {
+            var predicate = command.Predicate as DbBinaryExpression;
+            var lvalue = (predicate?.Left as DbPropertyExpression)?.Property;
+            var rvalue = (predicate?.Right as DbConstantExpression)?.Value;
+            if (lvalue != null && lvalue.Name == TenantId && rvalue != null && (long)rvalue != tenantId)
+                throw new NotSupportedException("Cross-tenant opreration detected");
         }
 
         public void TreeCreated(DbCommandTreeInterceptionContext interceptionContext)
@@ -86,18 +99,19 @@ namespace EFInterceptorDemo
                 {
                     // UPDATE case:
                     var context = GetContext(interceptionContext);
-                    ValidateTenant(updateCommand, context.TenantId);
+                    ValidateTenantProperty(updateCommand, context.TenantId);
+                    ValidateTenantPredicate(updateCommand, context.TenantId);
 
-                    var setClauses = new List<DbModificationClause>();                    
+                    var clauses = new List<DbModificationClause>();                    
 
-                    SetProperty(context, updateCommand, setClauses, "ModifiedById", DbExpression.FromInt64(context?.UserId));
-                    SetProperty(context, updateCommand, setClauses, "ModifiedOn", DbExpression.FromDateTime(DateTime.UtcNow));
+                    SetPropertyIfExists(context, updateCommand, clauses, "ModifiedById", DbExpression.FromInt64(context?.UserId));
+                    SetPropertyIfExists(context, updateCommand, clauses, "ModifiedOn", DbExpression.FromDateTime(DateTime.UtcNow));
 
                     var newUpdateCommand = new DbUpdateCommandTree(updateCommand.MetadataWorkspace,
                         updateCommand.DataSpace,
                         updateCommand.Target,
                         updateCommand.Predicate,
-                        MergeSetClauses(setClauses, updateCommand.SetClauses),
+                        MergeSetClauses(clauses, updateCommand.SetClauses),
                         null);
 
                     interceptionContext.Result = newUpdateCommand;
@@ -106,25 +120,27 @@ namespace EFInterceptorDemo
                 {
                     // INSERT case:
                     var context = GetContext(interceptionContext);
-                    var setClauses = new List<DbModificationClause>();
+                    var clauses = new List<DbModificationClause>();
 
-                    SetProperty(context, insertCommand, setClauses, "TenantId", DbExpression.FromInt64(context?.TenantId));
-                    SetProperty(context, insertCommand, setClauses, "CreatedById", DbExpression.FromInt64(context?.UserId));
-                    SetProperty(context, insertCommand, setClauses, "CreatedOn", DbExpression.FromDateTime(DateTime.UtcNow));
-                    SetProperty(context, insertCommand, setClauses, "ModifiedById", DbExpression.FromInt64(context?.UserId));
-                    SetProperty(context, insertCommand, setClauses, "ModifiedOn", DbExpression.FromDateTime(DateTime.UtcNow));
+                    SetPropertyIfExists(context, insertCommand, clauses, TenantId, DbExpression.FromInt64(context?.TenantId));
+                    SetPropertyIfExists(context, insertCommand, clauses, "CreatedById", DbExpression.FromInt64(context?.UserId));
+                    SetPropertyIfExists(context, insertCommand, clauses, "CreatedOn", DbExpression.FromDateTime(DateTime.UtcNow));
+                    SetPropertyIfExists(context, insertCommand, clauses, "ModifiedById", DbExpression.FromInt64(context?.UserId));
+                    SetPropertyIfExists(context, insertCommand, clauses, "ModifiedOn", DbExpression.FromDateTime(DateTime.UtcNow));
 
                     var newInsertCommand = new DbInsertCommandTree(insertCommand.MetadataWorkspace,
                         insertCommand.DataSpace,
                         insertCommand.Target,
-                        MergeSetClauses(setClauses, insertCommand.SetClauses),
+                        MergeSetClauses(clauses, insertCommand.SetClauses),
                         insertCommand.Returning);
 
                     interceptionContext.Result = newInsertCommand;
                 }
                 else if ((deleteCommand = interceptionContext.OriginalResult as DbDeleteCommandTree) != null)
                 {
-                    // DELETE: do nothing
+                    // DELETE
+                    var context = GetContext(interceptionContext);
+                    ValidateTenantPredicate(deleteCommand, context.TenantId);
                 }
             }
         }
@@ -147,8 +163,7 @@ namespace EFInterceptorDemo
         {
             if (entity.Properties.Any(p => p.Name == column))
             {
-                setClauses.Add(DbExpressionBuilder.SetClause(command.Target.VariableType.Variable(command.Target.VariableName).Property(column),
-                    value));
+                setClauses.Add(DbExpressionBuilder.SetClause(command.Target.VariableType.Variable(command.Target.VariableName).Property(column), value));
             }
         }
     }
