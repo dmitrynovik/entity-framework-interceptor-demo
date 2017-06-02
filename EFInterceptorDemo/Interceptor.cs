@@ -52,6 +52,20 @@ namespace EFInterceptorDemo
             AddClause(type, name, command, setClauses, expr);
         }
 
+        private static void ValidateTenant(DbUpdateCommandTree command, long tenantId)
+        {
+            foreach (var clause in command.SetClauses.OfType<DbSetClause>())
+            {
+                var pe = clause.Property as DbPropertyExpression;
+                var varRef = clause.Value as DbConstantExpression;
+                if (pe != null && pe.Property.Name == "TenantId" && varRef != null)
+                {
+                    if (!varRef.Value.Equals(tenantId))
+                        throw new NotSupportedException("Cross-tenant opreration detected");
+                }
+            }
+        }
+
         public void TreeCreated(DbCommandTreeInterceptionContext interceptionContext)
         {
             if (interceptionContext.OriginalResult.DataSpace == DataSpace.SSpace)
@@ -72,9 +86,10 @@ namespace EFInterceptorDemo
                 {
                     // UPDATE case:
                     var context = GetContext(interceptionContext);
-                    var setClauses = new List<DbModificationClause>();
+                    ValidateTenant(updateCommand, context.TenantId);
 
-                    SetProperty(context, updateCommand, setClauses, "TenantId", DbExpression.FromInt64(context?.TenantId));
+                    var setClauses = new List<DbModificationClause>();                    
+
                     SetProperty(context, updateCommand, setClauses, "ModifiedById", DbExpression.FromInt64(context?.UserId));
                     SetProperty(context, updateCommand, setClauses, "ModifiedOn", DbExpression.FromDateTime(DateTime.UtcNow));
 
