@@ -1,4 +1,5 @@
 ﻿using System;
+using System.Diagnostics;
 using System.Linq;
 
 namespace EFInterceptorDemo
@@ -11,6 +12,7 @@ namespace EFInterceptorDemo
 
             using (var ctx = new DataContext(tenantId: 2, userId: 66))
             {
+                Console.WriteLine("adding new employee with name {0} to tenant {1}", name, ctx.TenantId);
                 // INSERT (will assign automatically TenantId, CreatedBy, CreatedOn, ModifiedBy, ModifiedOn):
                 var employee = new Employee {Name = name, Salary = 100};
                 ctx.Employees.Add(employee);
@@ -21,7 +23,9 @@ namespace EFInterceptorDemo
             {
                 // UPDATE: (will verify TenantId, modify ModifiedBy, ModifiedOn):
                 var employee = ctx.Employees.First(x => x.Name == name);
-                employee.Salary = employee.Salary + 1;
+                var salary = employee.Salary + 1;
+                Console.WriteLine("\nupdating employee {0} with salary {1}", name, salary);
+                employee.Salary = salary;
                 ctx.SaveChanges();
             }
 
@@ -36,9 +40,10 @@ namespace EFInterceptorDemo
             using (var ctx = new DataContext(tenantId: 3, userId: 66))
             {
                 // SELECT with different tenant returns NULL:
-                Console.WriteLine($"Context with tenant id {ctx.TenantId} will return NULL:");
-                var employee = ctx.Employees.First(x => x.Name == "aaa");
+                Console.WriteLine($"\nselecting employee {name} with tenant id {ctx.TenantId} will return NULL:");
+                var employee = ctx.Employees.FirstOrDefault(x => x.Name == name);
                 Console.WriteLine(employee?.ToString());
+                Debug.Assert(employee == null);
             }
 
             //using (var ctx = new DataContext(tenantId: 2, userId: 66))

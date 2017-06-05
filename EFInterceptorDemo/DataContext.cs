@@ -17,7 +17,8 @@ namespace EFInterceptorDemo
 
         protected override void OnModelCreating(DbModelBuilder modelBuilder)
         {
-            DbInterception.Add(new EntityInterceptor());
+            DbInterception.Add(new EntityTreeInterceptor());
+            DbInterception.Add(new EntityCommandInterceptor());
         }
 
         public long UserId { get; set; }

@@ -9,7 +9,7 @@ using System.Linq;
 
 namespace EFInterceptorDemo
 {
-    public class EntityInterceptor : IDbCommandTreeInterceptor
+    public class EntityTreeInterceptor : IDbCommandTreeInterceptor
     {
         public class TenantQueryVisitor : DefaultExpressionVisitor
         {
@@ -25,13 +25,10 @@ namespace EFInterceptorDemo
                 var table = (EntityType)expression.Target.ElementType;
                 if (table.Properties.Any(p => p.Name == TenantId))
                 {
-                    //var binding = expression.Bind();
-                    //return binding.Filter(binding.VariableType.Variable(binding.VariableName).Property(TenantId).Equal(DbExpression.FromInt64(_tenantId)));
                     DbExpression expr = base.Visit(expression);
                     var binding = expr.Bind();
                     var property = binding.VariableType.Variable(binding.VariableName).Property(TenantId);
-                    var param = property.Property.TypeUsage.Parameter(TenantId);
-                    expr = binding.Filter(property.Equal(param));
+                    expr = binding.Filter(property.Equal(property.Property.TypeUsage.Parameter(TenantId)));
                     return expr;
                 }
                 return base.Visit(expression);
@@ -94,17 +91,16 @@ namespace EFInterceptorDemo
                 DbInsertCommandTree insertCommand;
                 DbUpdateCommandTree updateCommand;
 
+                var context = interceptionContext.GetContext<DataContext>();
                 if ((selectCommand = interceptionContext.Result as DbQueryCommandTree) != null)
                 {
                     // SELECT case:
-                    var context = GetContext(interceptionContext);
                     var newQuery = selectCommand.Query.Accept(new TenantQueryVisitor(context.TenantId));
                     interceptionContext.Result = new DbQueryCommandTree(selectCommand.MetadataWorkspace, selectCommand.DataSpace, newQuery);
                 }
                 else if ((updateCommand = interceptionContext.OriginalResult as DbUpdateCommandTree) != null)
                 {
                     // UPDATE case:
-                    var context = GetContext(interceptionContext);
                     ValidateTenantProperty(updateCommand, context.TenantId);
                     ValidateTenantPredicate(updateCommand, context.TenantId);
 
@@ -125,7 +121,6 @@ namespace EFInterceptorDemo
                 else if ((insertCommand = interceptionContext.Result as DbInsertCommandTree) != null)
                 {
                     // INSERT case:
-                    var context = GetContext(interceptionContext);
                     var clauses = new List<DbModificationClause>();
 
                     SetPropertyIfExists(context, insertCommand, clauses, TenantId, DbExpression.FromInt64(context?.TenantId));
@@ -145,7 +140,6 @@ namespace EFInterceptorDemo
                 else if ((deleteCommand = interceptionContext.OriginalResult as DbDeleteCommandTree) != null)
                 {
                     // DELETE
-                    var context = GetContext(interceptionContext);
                     ValidateTenantPredicate(deleteCommand, context.TenantId);
                 }
             }
@@ -162,8 +156,6 @@ namespace EFInterceptorDemo
             });
             return original.Values.Cast<DbModificationClause>().ToList().AsReadOnly();
         }
-
-        private static DataContext GetContext(DbInterceptionContext interceptionContext) => interceptionContext.DbContexts.OfType<DataContext>().FirstOrDefault();
 
         private static void AddClause(EntityType entity, string column, DbModificationCommandTree command, ICollection<DbModificationClause> setClauses, DbExpression value)
         {

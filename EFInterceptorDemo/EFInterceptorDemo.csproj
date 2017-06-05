@@ -46,9 +46,11 @@
   </ItemGroup>
   <ItemGroup>
     <Compile Include="DataContext.cs" />
+    <Compile Include="DbCommandInterceptionContextExtensions.cs" />
     <Compile Include="Entities.cs" />
+    <Compile Include="EntityCommandInterceptor.cs" />
     <Compile Include="EnumerableExtensions.cs" />
-    <Compile Include="Interceptor.cs" />
+    <Compile Include="EntityTreeInterceptor.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />
   </ItemGroup>
