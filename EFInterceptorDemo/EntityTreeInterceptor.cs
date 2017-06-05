@@ -14,17 +14,43 @@ namespace EFInterceptorDemo
         public class TenantQueryVisitor : DefaultExpressionVisitor
         {
             public override DbExpression Visit(DbScanExpression expression)
-            {                
+            {
+                var result = base.Visit(expression);
                 var table = (EntityType)expression.Target.ElementType;
                 if (table.Properties.Any(p => p.Name == TenantId))
                 {
-                    DbExpression expr = base.Visit(expression);
-                    var binding = expr.Bind();
+                    var binding = result.Bind();
                     var property = binding.VariableType.Variable(binding.VariableName).Property(TenantId);
-                    expr = binding.Filter(property.Equal(property.Property.TypeUsage.Parameter(TenantId)));
-                    return expr;
+                    return binding.Filter(property.Equal(property.Property.TypeUsage.Parameter(TenantId)));
                 }
-                return base.Visit(expression);
+                return result;
+            }
+        }
+
+        public class TenantPredicateVisitor : DefaultExpressionVisitor
+        {
+            private readonly long _tenantId;
+            private readonly DbExpressionBinding _target;
+
+            public TenantPredicateVisitor(DbExpressionBinding target, long tenantId)
+            {
+                _tenantId = tenantId;
+                _target = target;
+            }
+
+            public override DbExpression Visit(DbComparisonExpression expression)
+            {
+                var result = (DbComparisonExpression)base.Visit(expression);
+                var table = (expression.Left as DbPropertyExpression)?.Property.DeclaringType as EntityType;
+                var tenantProp = table?.Properties.FirstOrDefault(p => p.Name == TenantId);
+                if (tenantProp != null)
+                {
+                    var tenantVar = _target.VariableType.Variable(TenantId);
+                    var tenantPropExpr = tenantVar.Property(TenantId);
+                    var tenantExpr = tenantPropExpr.Equal(DbExpression.FromInt64(_tenantId));
+                    return result.And(tenantExpr);
+                }
+                return result;
             }
         }
 
@@ -41,38 +67,6 @@ namespace EFInterceptorDemo
                 return;
 
             AddClause(type, name, command, setClauses, expr);
-        }
-
-        private static void ValidateTenantProperty(DbUpdateCommandTree command, long tenantId)
-        {
-            foreach (var clause in command.SetClauses.OfType<DbSetClause>())
-            {
-                var pe = clause.Property as DbPropertyExpression;
-                var rvalue = clause.Value as DbConstantExpression;
-                if (pe != null && pe.Property.Name == TenantId && rvalue != null)
-                {
-                    if ((long)rvalue.Value != tenantId)
-                        throw new NotSupportedException("Cross-tenant opreration detected");
-                }
-            }
-        }
-
-        private static void ValidateTenantPredicate(DbDeleteCommandTree command, long tenantId)
-        {
-            var predicate = command.Predicate as DbBinaryExpression;
-            var lvalue = (predicate?.Left as DbPropertyExpression)?.Property;
-            var rvalue = (predicate?.Right as DbConstantExpression)?.Value;
-            if (lvalue != null && lvalue.Name == TenantId && rvalue != null && (long)rvalue != tenantId)
-                throw new NotSupportedException("Cross-tenant opreration detected");
-        }
-
-        private static void ValidateTenantPredicate(DbUpdateCommandTree command, long tenantId)
-        {
-            var predicate = command.Predicate as DbBinaryExpression;
-            var lvalue = (predicate?.Left as DbPropertyExpression)?.Property;
-            var rvalue = (predicate?.Right as DbConstantExpression)?.Value;
-            if (lvalue != null && lvalue.Name == TenantId && rvalue != null && (long)rvalue != tenantId)
-                throw new NotSupportedException("Cross-tenant opreration detected");
         }
 
         public void TreeCreated(DbCommandTreeInterceptionContext interceptionContext)
@@ -94,18 +88,14 @@ namespace EFInterceptorDemo
                 else if ((updateCommand = interceptionContext.OriginalResult as DbUpdateCommandTree) != null)
                 {
                     // UPDATE case:
-                    ValidateTenantProperty(updateCommand, context.TenantId);
-                    ValidateTenantPredicate(updateCommand, context.TenantId);
-
                     var clauses = new List<DbModificationClause>();                    
-
                     SetPropertyIfExists(context, updateCommand, clauses, "ModifiedById", DbExpression.FromInt64(context.UserId));
                     SetPropertyIfExists(context, updateCommand, clauses, "ModifiedOn", DbExpression.FromDateTime(DateTime.UtcNow));
 
                     var newUpdateCommand = new DbUpdateCommandTree(updateCommand.MetadataWorkspace,
                         updateCommand.DataSpace,
                         updateCommand.Target,
-                        updateCommand.Predicate,
+                        updateCommand.Predicate.Accept(new TenantPredicateVisitor(updateCommand.Target, context.TenantId)),
                         MergeSetClauses(clauses, updateCommand.SetClauses),
                         null);
 
@@ -133,7 +123,12 @@ namespace EFInterceptorDemo
                 else if ((deleteCommand = interceptionContext.OriginalResult as DbDeleteCommandTree) != null)
                 {
                     // DELETE
-                    ValidateTenantPredicate(deleteCommand, context.TenantId);
+                    var newDeleteCommand = new DbDeleteCommandTree(deleteCommand.MetadataWorkspace,
+                        deleteCommand.DataSpace,
+                        deleteCommand.Target,
+                        deleteCommand.Predicate.Accept(new TenantPredicateVisitor(deleteCommand.Target, context.TenantId)));
+
+                    interceptionContext.Result = newDeleteCommand;
                 }
             }
         }
