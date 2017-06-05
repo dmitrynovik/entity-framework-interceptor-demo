@@ -13,13 +13,6 @@ namespace EFInterceptorDemo
     {
         public class TenantQueryVisitor : DefaultExpressionVisitor
         {
-            private readonly long _tenantId;
-
-            public TenantQueryVisitor(long tenantId)
-            {
-                _tenantId = tenantId;
-            }
-
             public override DbExpression Visit(DbScanExpression expression)
             {                
                 var table = (EntityType)expression.Target.ElementType;
@@ -95,7 +88,7 @@ namespace EFInterceptorDemo
                 if ((selectCommand = interceptionContext.Result as DbQueryCommandTree) != null)
                 {
                     // SELECT case:
-                    var newQuery = selectCommand.Query.Accept(new TenantQueryVisitor(context.TenantId));
+                    var newQuery = selectCommand.Query.Accept(new TenantQueryVisitor());
                     interceptionContext.Result = new DbQueryCommandTree(selectCommand.MetadataWorkspace, selectCommand.DataSpace, newQuery);
                 }
                 else if ((updateCommand = interceptionContext.OriginalResult as DbUpdateCommandTree) != null)
@@ -106,7 +99,7 @@ namespace EFInterceptorDemo
 
                     var clauses = new List<DbModificationClause>();                    
 
-                    SetPropertyIfExists(context, updateCommand, clauses, "ModifiedById", DbExpression.FromInt64(context?.UserId));
+                    SetPropertyIfExists(context, updateCommand, clauses, "ModifiedById", DbExpression.FromInt64(context.UserId));
                     SetPropertyIfExists(context, updateCommand, clauses, "ModifiedOn", DbExpression.FromDateTime(DateTime.UtcNow));
 
                     var newUpdateCommand = new DbUpdateCommandTree(updateCommand.MetadataWorkspace,
