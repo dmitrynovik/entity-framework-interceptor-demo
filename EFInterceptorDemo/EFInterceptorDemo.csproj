@@ -49,7 +49,6 @@
     <Compile Include="DbCommandInterceptionContextExtensions.cs" />
     <Compile Include="Entities.cs" />
     <Compile Include="EntityCommandInterceptor.cs" />
-    <Compile Include="EnumerableExtensions.cs" />
     <Compile Include="EntityTreeInterceptor.cs" />
     <Compile Include="Program.cs" />
     <Compile Include="Properties\AssemblyInfo.cs" />

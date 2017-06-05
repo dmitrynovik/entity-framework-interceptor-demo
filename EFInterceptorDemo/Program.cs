@@ -36,7 +36,6 @@ namespace EFInterceptorDemo
                 Console.WriteLine($"Name: {employee.Name}, Salary: {employee.Salary}, Tenant: {employee.TenantId}, CreatedBy: {employee.CreatedById}, CreatedOn: {employee.CreatedOn}, ModifiedBy: {employee.ModifiedById}, ModifiedAt: {employee.ModifiedOn}");
             }
 
-            Console.WriteLine();
             using (var ctx = new DataContext(tenantId: 3, userId: 66))
             {
                 // SELECT with different tenant returns NULL:

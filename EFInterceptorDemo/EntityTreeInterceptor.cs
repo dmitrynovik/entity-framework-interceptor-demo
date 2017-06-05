@@ -147,13 +147,13 @@ namespace EFInterceptorDemo
 
         private static ReadOnlyCollection<DbModificationClause> MergeSetClauses(ICollection<DbModificationClause> setClauses, IList<DbModificationClause> originalClauses)
         {
-            // Each clause must be specified in a command only once, otherwise it'll cause runtime error:
+            // Each named clause must be specified in a command at most once, otherwise it'll cause runtime error:
             var original = originalClauses.Cast<DbSetClause>().ToDictionary(i => ((DbPropertyExpression)i.Property).Property.Name, i => i);
             var addenda = setClauses.Cast<DbSetClause>().ToDictionary(i => ((DbPropertyExpression)i.Property).Property.Name, i => i);
-            addenda.Each(kvp =>
+            foreach (var kvp in addenda)
             {
                 original[kvp.Key] = kvp.Value;
-            });
+            }
             return original.Values.Cast<DbModificationClause>().ToList().AsReadOnly();
         }
 
